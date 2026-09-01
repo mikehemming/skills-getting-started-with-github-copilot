@@ -72,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.detail || "Unable to unregister participant.";
         messageDiv.className = "error";
         messageDiv.classList.remove("hidden");
-        return;
+        return { ok: false, result };
       }
 
       messageDiv.textContent = result.message;
@@ -82,12 +82,14 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.classList.add("hidden");
       }, 5000);
 
-      fetchActivities();
+      await fetchActivities();
+      return { ok: true, result };
     } catch (error) {
       messageDiv.textContent = "Failed to unregister participant.";
       messageDiv.className = "error";
       messageDiv.classList.remove("hidden");
       console.error("Error unregistering participant:", error);
+      return { ok: false, error };
     }
   }
 
@@ -95,8 +97,36 @@ document.addEventListener("DOMContentLoaded", () => {
   signupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const email = document.getElementById("email").value;
-    const activity = document.getElementById("activity").value;
+    const emailInput = document.getElementById("email");
+    const activitySelectEl = document.getElementById("activity");
+    const submitButton = signupForm.querySelector('button[type="submit"]');
+
+    const email = emailInput.value.trim();
+    const activity = activitySelectEl.value;
+
+    // Basic client-side validation
+    if (!email) {
+      messageDiv.textContent = "Please enter your email.";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+      return;
+    }
+
+    if (!activity) {
+      messageDiv.textContent = "Please select an activity.";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+      return;
+    }
+
+    // Disable form controls while the request is in progress
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.dataset.originalText = submitButton.textContent;
+      submitButton.textContent = "Signing up...";
+    }
+    emailInput.disabled = true;
+    activitySelectEl.disabled = true;
 
     try {
       const response = await fetch(
@@ -112,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
-        fetchActivities();
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -129,6 +159,15 @@ document.addEventListener("DOMContentLoaded", () => {
       messageDiv.className = "error";
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
+    } finally {
+      // Re-enable form controls
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = submitButton.dataset.originalText || "Sign Up";
+        delete submitButton.dataset.originalText;
+      }
+      emailInput.disabled = false;
+      activitySelectEl.disabled = false;
     }
   });
 
@@ -140,7 +179,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const activityName = deleteButton.dataset.activity;
     const email = deleteButton.dataset.email;
-    await unregisterParticipant(activityName, email);
+
+    // Disable the button while the request is in progress to prevent duplicate requests
+    deleteButton.disabled = true;
+    deleteButton.setAttribute("aria-busy", "true");
+
+    try {
+      await unregisterParticipant(activityName, email);
+    } finally {
+      // Re-enable button regardless of outcome
+      deleteButton.disabled = false;
+      deleteButton.removeAttribute("aria-busy");
+    }
   });
 
   // Initialize app
